@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  game-api:
+    build:
+      context: ./game-api
+      dockerfile: Dockerfile
+    depends_on:
+      - postgres_db
+    environment:
+      - DB_STRING=postgres://user:password@postgres_db/bowling_game?sslmode=disable
+
+  frontend:
+    build:
+      context: ./game-web
+      dockerfile: Dockerfile
+      args:
+        - VITE_APP_API_URL=/api
+    ports:
+      - "3003:80"
+    depends_on:
+      - game-api
+
+  postgres_db:
+    image: postgres:15
+    container_name: bowling_db
+    ports:
+      - "6432:5432"
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=bowling_game
+    volumes:
+      - bowling_db_data:/var/lib/postgresql/data
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d bowling_game"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  flyway:
+    image: flyway/flyway:latest
+    depends_on:
+      postgres_db:
+        condition: service_healthy
+    volumes:
+      - ./game-api/sql:/flyway/sql
+    command:
+      - -url=jdbc:postgresql://postgres_db/bowling_game
+      - -user=user
+      - -password=password
+      - migrate
+volumes:
+  bowling_db_data:
